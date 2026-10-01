@@ -4,6 +4,9 @@ import '../models/bill_calculation.dart';
 import '../models/recharge_entry.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+
 class TenantHomeController extends GetxController {
   final String managerUid;
   final String flatLabel;
@@ -17,6 +20,13 @@ class TenantHomeController extends GetxController {
   RxList<RechargeEntry> myRecharges = <RechargeEntry>[].obs;
   RxList<Map<String, dynamic>> myBills = <Map<String, dynamic>>[].obs;
 
+  RxString managerName = ''.obs;
+  RxString managerPhone = ''.obs;
+  RxString flatBaselineUnit = ''.obs;
+
+  RxList<FlSpot> usageSpots = <FlSpot>[].obs;
+  RxList<String> xAxisLabels = <String>[].obs;
+
   @override
   void onInit() {
     super.onInit();
@@ -26,6 +36,20 @@ class TenantHomeController extends GetxController {
   Future<void> _loadTenantData() async {
     isLoading.value = true;
     try {
+      // 0. Fetch Manager Config for Contact Info
+      final config = await _firestoreService.getMeterConfig(managerUid);
+      if (config != null) {
+        managerName.value = config.mainTenantName ?? 'Manager';
+        managerPhone.value = config.mainTenantContact ?? '';
+        
+        try {
+          final sub = config.subMeters.firstWhere((s) => s.label == flatLabel);
+          flatBaselineUnit.value = sub.baselineUnit.toStringAsFixed(1);
+        } catch (e) {
+          flatBaselineUnit.value = 'N/A';
+        }
+      }
+
       // 1. Fetch all recharges for this flat
       final rechargesSnapshot = await _firestoreService.getAllRecharges(managerUid);
       List<RechargeEntry> recharges = [];
@@ -50,7 +74,6 @@ class TenantHomeController extends GetxController {
         final data = doc.data();
         final calc = BillCalculation.fromMap(data);
         
-        // Find this flat in the calculation
         try {
           final myFlatCalc = calc.flats.firstWhere((f) => f.flatLabel == flatLabel);
           totalCost += myFlatCalc.cost;
@@ -63,7 +86,7 @@ class TenantHomeController extends GetxController {
             'driveUrl': data['driveUrl'],
           });
         } catch (e) {
-          // Flat might not have existed in this old bill, ignore
+          // ignore
         }
       }
       
@@ -71,7 +94,28 @@ class TenantHomeController extends GetxController {
       bills.sort((a, b) => (b['month'] as String).compareTo(a['month'] as String));
       myBills.value = bills;
 
-      // 3. Calculate balance
+      // 3. Prepare Graph Data (Last 6 bills)
+      List<FlSpot> spots = [];
+      List<String> labels = [];
+      
+      final graphBills = bills.take(6).toList().reversed.toList(); // Oldest to newest for X axis
+      for (int i = 0; i < graphBills.length; i++) {
+        final b = graphBills[i];
+        final units = (b['unitsUsed'] as num).toDouble();
+        final monthStr = b['month'] as String; // e.g. "2023-10"
+        
+        spots.add(FlSpot(i.toDouble(), units));
+        try {
+          final parsed = DateFormat('yyyy-MM').parse(monthStr);
+          labels.add(DateFormat('MMM').format(parsed));
+        } catch (e) {
+          labels.add(monthStr);
+        }
+      }
+      usageSpots.value = spots;
+      xAxisLabels.value = labels;
+
+      // 4. Calculate balance
       balance.value = totalRecharged - totalCost;
 
     } catch (e) {

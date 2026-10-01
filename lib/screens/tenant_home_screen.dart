@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../controllers/tenant_home_controller.dart';
 
-class TenantHomeScreen extends StatelessWidget {
+class TenantHomeScreen extends StatefulWidget {
   final String managerUid;
   final String flatLabel;
 
@@ -15,12 +17,24 @@ class TenantHomeScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final TenantHomeController controller = Get.put(TenantHomeController(managerUid: managerUid, flatLabel: flatLabel));
+  State<TenantHomeScreen> createState() => _TenantHomeScreenState();
+}
 
+class _TenantHomeScreenState extends State<TenantHomeScreen> {
+  int _currentIndex = 0;
+  late final TenantHomeController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = Get.put(TenantHomeController(managerUid: widget.managerUid, flatLabel: widget.flatLabel));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Flat $flatLabel Dashboard'),
+        title: Text('Flat ${widget.flatLabel} Dashboard'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -37,28 +51,162 @@ class TenantHomeScreen extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        return RefreshIndicator(
-          onRefresh: () async => controller.onInit(),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildBalanceCard(controller),
-              const SizedBox(height: 24),
-              const Text('Monthly Bills', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const Divider(),
-              _buildBillsList(controller),
-              const SizedBox(height: 24),
-              const Text('Deposit History', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const Divider(),
-              _buildRechargesList(controller),
-            ],
-          ),
+        return IndexedStack(
+          index: _currentIndex,
+          children: [
+            _buildDashboardTab(),
+            _buildBillsTab(),
+            _buildDepositsTab(),
+          ],
         );
       }),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Bills'),
+          BottomNavigationBarItem(icon: Icon(Icons.payments), label: 'Deposits'),
+        ],
+      ),
     );
   }
 
-  Widget _buildBalanceCard(TenantHomeController controller) {
+  Widget _buildDashboardTab() {
+    return RefreshIndicator(
+      onRefresh: () async => controller.onInit(),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildBalanceCard(),
+          const SizedBox(height: 16),
+          _buildManagerContactCard(),
+          const SizedBox(height: 16),
+          _buildUsageGraph(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBillsTab() {
+    return RefreshIndicator(
+      onRefresh: () async => controller.onInit(),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('Monthly Bills', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Divider(),
+          _buildBillsList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDepositsTab() {
+    return RefreshIndicator(
+      onRefresh: () async => controller.onInit(),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('Deposit History', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Divider(),
+          _buildRechargesList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManagerContactCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: const CircleAvatar(
+          backgroundColor: Colors.blue,
+          child: Icon(Icons.person, color: Colors.white),
+        ),
+        title: Text(controller.managerName.value.isEmpty ? 'Manager' : controller.managerName.value),
+        subtitle: Text(controller.managerPhone.value.isEmpty ? 'Contact unknown' : controller.managerPhone.value),
+        trailing: controller.managerPhone.value.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.phone, color: Colors.green),
+                onPressed: () async {
+                  final url = Uri.parse('tel:${controller.managerPhone.value}');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url);
+                  }
+                },
+              )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildUsageGraph() {
+    if (controller.usageSpots.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Electricity Usage (Last 6 Months)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 200,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: (controller.usageSpots.map((e) => e.y).reduce((a, b) => a > b ? a : b) * 1.2).clamp(10, double.infinity),
+                  barTouchData: BarTouchData(enabled: false),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (double value, TitleMeta meta) {
+                          if (value.toInt() >= 0 && value.toInt() < controller.xAxisLabels.length) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(controller.xAxisLabels[value.toInt()], style: const TextStyle(fontSize: 10)),
+                            );
+                          }
+                          return const Text('');
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  ),
+                  gridData: FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                  barGroups: controller.usageSpots.map((spot) {
+                    return BarChartGroupData(
+                      x: spot.x.toInt(),
+                      barRods: [
+                        BarChartRodData(
+                          toY: spot.y,
+                          color: Colors.blue.shade400,
+                          width: 16,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBalanceCard() {
     final balance = controller.balance.value;
     final isAdvance = balance >= 0;
     final absBal = balance.abs().toStringAsFixed(2);
@@ -94,7 +242,7 @@ class TenantHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBillsList(TenantHomeController controller) {
+  Widget _buildBillsList() {
     if (controller.myBills.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16.0),
@@ -130,7 +278,7 @@ class TenantHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRechargesList(TenantHomeController controller) {
+  Widget _buildRechargesList() {
     if (controller.myRecharges.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16.0),

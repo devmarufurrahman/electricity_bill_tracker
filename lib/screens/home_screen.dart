@@ -173,6 +173,7 @@ class HomeScreen extends StatelessWidget {
         return Column(
           children: [
             _buildSummaryCard(context),
+            _buildQuickActions(context),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Align(
@@ -214,29 +215,107 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 16),
               backgroundColor: Theme.of(context).primaryColor,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () => Get.to(() => CalculateBillScreen()),
-            child: const Text('Calculate Month-End Bill', style: TextStyle(fontSize: 18)),
+            child: const Text('Calculate Month-End Bill', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ),
         ),
       ),
     );
   }
 
+  Widget _buildQuickActions(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildActionItem(
+            context,
+            icon: Icons.account_balance_wallet,
+            label: 'Ledger',
+            color: Colors.orange,
+            onTap: () => Get.to(() => LedgerScreen()),
+          ),
+          _buildActionItem(
+            context,
+            icon: Icons.receipt_long,
+            label: 'Past Bills',
+            color: Colors.green,
+            onTap: () => Get.to(() => ReportsScreen()),
+          ),
+          _buildActionItem(
+            context,
+            icon: Icons.person,
+            label: 'Profiles',
+            color: Colors.purple,
+            onTap: () => Get.to(() => MeterProfileScreen()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionItem(BuildContext context, {required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSummaryCard(BuildContext context) {
-    return Card(
+    return Container(
       margin: const EdgeInsets.all(16),
-      elevation: 4,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          )
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Month: ${_controller.currentMonthTag.value}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Month: ${_controller.currentMonthTag.value}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  ],
+                ),
                 IconButton(
-                  icon: const Icon(Icons.edit_calendar, color: Colors.blue),
+                  icon: const Icon(Icons.edit_calendar, color: Colors.white70),
                   onPressed: () async {
                     try {
                       final currentParsed = DateFormat('yyyy-MM').parse(_controller.currentMonthTag.value);
@@ -250,37 +329,57 @@ class HomeScreen extends StatelessWidget {
                         _controller.changeMonth(DateFormat('yyyy-MM').format(date));
                       }
                     } catch (e) {
-                      // fallback if parsing fails
+                      // fallback
                     }
                   },
                 ),
               ],
             ),
-            const Divider(),
-            const SizedBox(height: 8),
+            const Divider(color: Colors.white30),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 16,
               runSpacing: 16,
               alignment: WrapAlignment.spaceAround,
               children: _controller.availableFlats.map((flat) {
-                return Column(
-                  children: [
-                    Text('$flat Deposited', style: const TextStyle(fontSize: 14, color: Colors.blueGrey)),
-                    const SizedBox(height: 4),
-                    Text('${_controller.getTotalRechargeForFlat(flat)} BDT', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text('Last Reading: ${_controller.lastReadingsMap[flat] ?? 0.0}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  ],
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(flat, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                      const SizedBox(height: 4),
+                      Text('${_controller.getTotalRechargeForFlat(flat)} BDT', style: const TextStyle(fontSize: 14, color: Colors.white)),
+                      const SizedBox(height: 4),
+                      Text('Last: ${_controller.lastReadingsMap[flat] ?? 0.0}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                    ],
+                  ),
                 );
               }).toList(),
             ),
             const SizedBox(height: 16),
-            const Divider(),
+            const Divider(color: Colors.white30),
+            const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Total Recharge: ${_controller.totalRecharge} BDT', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Text('Mother Reading: ${_controller.lastReadingsMap["Mother"] ?? 0.0}', style: const TextStyle(fontSize: 14, color: Colors.brown)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Total Deposited', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text('${_controller.totalRecharge} BDT', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('Mother Reading', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text('${_controller.lastReadingsMap["Mother"] ?? 0.0}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ],
+                ),
               ],
             ),
           ],
